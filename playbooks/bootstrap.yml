@@ -1,0 +1,52 @@
+---
+- name: 서버 초기 구성
+  hosts: webservers
+  become: yes
+
+  vars:
+    deploy_user: deploy
+    admin_pubkey: "{{ lookup('file', '~/.ssh/id_ecdsa.pub') }}"
+
+  tasks:
+    - name: deploy 계정 생성
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        create_home: yes
+        state: present
+
+    - name: deploy SSH 공개키 등록
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ admin_pubkey }}"
+        state: present
+
+    - name: sudoers 규칙 배포 (systemctl만 허용)
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/deploy
+        content: "deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl\n"
+        owner: root
+        group: root
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: chronyd 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: chronyd
+        state: started
+        enabled: yes
+
+    - name: 시각 즉시 보정
+      ansible.builtin.command: chronyc makestep
+      changed_when: false
+
+    - name: 시스템 시각을 하드웨어 시계에 반영
+      ansible.builtin.command: hwclock --systohc
+      changed_when: false
+
+    - name: 방화벽에 ssh 허용
+      ansible.posix.firewalld:
+        service: ssh
+        permanent: yes
+        immediate: yes
+        state: enabled
