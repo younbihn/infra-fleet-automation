@@ -1,0 +1,7 @@
+*.pem
+*.key
+id_rsa*
+id_ecdsa*
+*.retry
+.DS_Store
+vault-password*
