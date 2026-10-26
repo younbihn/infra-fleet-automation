@@ -5,3 +5,6 @@ id_ecdsa*
 *.retry
 .DS_Store
 vault-password*
+
+# 점검 로그
+.checkup/
