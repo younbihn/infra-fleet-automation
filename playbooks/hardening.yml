@@ -1,0 +1,86 @@
+---
+- name: 서버 보안 하드닝
+  hosts: webservers
+  become: yes
+
+  vars:
+    ssh_hardening:
+      - { regexp: '^#?PermitRootLogin',          line: 'PermitRootLogin no' }
+      - { regexp: '^#?PasswordAuthentication',   line: 'PasswordAuthentication no' }
+      - { regexp: '^#?PermitEmptyPasswords',     line: 'PermitEmptyPasswords no' }
+      - { regexp: '^#?MaxAuthTries',             line: 'MaxAuthTries 3' }
+      - { regexp: '^#?X11Forwarding',            line: 'X11Forwarding no' }
+      - { regexp: '^#?ClientAliveInterval',      line: 'ClientAliveInterval 300' }
+      - { regexp: '^#?ClientAliveCountMax',      line: 'ClientAliveCountMax 2' }
+
+  tasks:
+    # ── 안전장치: 키 인증이 되는지 먼저 확인한다 ──
+    - name: 접속 계정의 authorized_keys 존재 확인
+      ansible.builtin.stat:
+        path: "/home/{{ ansible_user }}/.ssh/authorized_keys"
+      register: authkey
+      tags: [ssh, preflight]
+
+    - name: 키가 없으면 중단 (비밀번호 인증을 끄면 접속 불가)
+      ansible.builtin.assert:
+        that:
+          - authkey.stat.exists
+          - authkey.stat.size | int > 0
+        fail_msg: >-
+          {{ ansible_user }}의 authorized_keys가 없거나 비어 있다.
+          비밀번호 인증을 끄면 이 서버에 접속할 수 없게 되므로 중단한다.
+          먼저 ssh-copy-id 로 키를 등록할 것.
+        success_msg: "키 인증 확인됨. 안전하게 진행 가능."
+      tags: [ssh, preflight]
+
+    # ── sshd 하드닝 ──
+    - name: sshd 보안 설정 적용
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+        validate: 'sshd -t -f %s'
+      loop: "{{ ssh_hardening }}"
+      notify: restart sshd
+      tags: [ssh]
+
+    # ── 방화벽 ──
+    - name: 기본 zone 확인
+      ansible.builtin.command: firewall-cmd --get-default-zone
+      register: default_zone
+      changed_when: false
+      tags: [firewall]
+
+    - name: 기본 zone 보고
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} 기본 zone: {{ default_zone.stdout }}"
+      tags: [firewall]
+
+    - name: 필요한 서비스만 허용
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: yes
+        immediate: yes
+        state: enabled
+      loop:
+        - ssh
+      tags: [firewall]
+
+    - name: 사용하지 않는 서비스 차단
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: yes
+        immediate: yes
+        state: disabled
+      loop:
+        - dhcpv6-client
+        - cockpit
+      failed_when: false
+      tags: [firewall]
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted

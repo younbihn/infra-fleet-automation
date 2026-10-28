@@ -6,6 +6,7 @@
   vars:
     deploy_user: deploy
     admin_pubkey: "{{ lookup('file', '~/.ssh/id_ecdsa.pub') }}"
+    clock_drift_threshold: 5
 
   tasks:
     - name: deploy 계정 생성
@@ -14,12 +15,14 @@
         shell: /bin/bash
         create_home: yes
         state: present
+      tags: [account]
 
     - name: deploy SSH 공개키 등록
       ansible.posix.authorized_key:
         user: "{{ deploy_user }}"
         key: "{{ admin_pubkey }}"
         state: present
+      tags: [account, ssh]
 
     - name: sudoers 규칙 배포 (systemctl만 허용)
       ansible.builtin.copy:
@@ -29,20 +32,36 @@
         group: root
         mode: '0440'
         validate: 'visudo -cf %s'
+      tags: [account, sudo]
 
     - name: chronyd 실행 및 부팅 시 자동 시작
       ansible.builtin.systemd:
         name: chronyd
         state: started
         enabled: yes
+      tags: [time]
 
-    - name: 시각 즉시 보정
+    - name: 컨트롤 노드와의 시각 오차 계산
+      ansible.builtin.set_fact:
+        clock_drift_sec: >-
+          {{ ((ansible_facts.date_time.epoch | int)
+              - (lookup('pipe', 'date +%s') | int)) | abs }}
+      tags: [time]
+
+    - name: 시각 오차 보고
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: 오차 {{ clock_drift_sec }}초"
+      tags: [time]
+
+    - name: 시각 즉시 보정 (오차 임계치 초과 시에만)
       ansible.builtin.command: chronyc makestep
-      changed_when: false
+      when: clock_drift_sec | int > clock_drift_threshold
+      tags: [time]
 
-    - name: 시스템 시각을 하드웨어 시계에 반영
+    - name: 시스템 시각을 하드웨어 시계에 반영 (보정했을 때만)
       ansible.builtin.command: hwclock --systohc
-      changed_when: false
+      when: clock_drift_sec | int > clock_drift_threshold
+      tags: [time]
 
     - name: 방화벽에 ssh 허용
       ansible.posix.firewalld:
@@ -50,3 +69,4 @@
         permanent: yes
         immediate: yes
         state: enabled
+      tags: [firewall]
