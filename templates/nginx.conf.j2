@@ -1,0 +1,57 @@
+# {{ ansible_managed }}
+# 이 파일은 Ansible이 관리합니다. 직접 수정하면 다음 배포 때 덮어써집니다.
+
+user nginx;
+worker_processes {{ nginx_worker_processes }};
+error_log /var/log/nginx/error.log {{ nginx_error_log_level }};
+pid /run/nginx.pid;
+
+events {
+    worker_connections {{ nginx_worker_connections }};
+}
+
+http {
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log /var/log/nginx/access.log main;
+
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout {{ nginx_keepalive_timeout }};
+    types_hash_max_size 4096;
+    server_tokens off;
+
+    include /etc/nginx/conf.d/*.conf;
+
+    server {
+        listen       {{ nginx_port }};
+        server_name  {{ ansible_facts.hostname }};
+        root         /usr/share/nginx/html;
+
+        location / {
+            index index.html;
+        }
+
+        # 헬스체크 — 배포 검증과 로드밸런서가 사용한다
+        location /health {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok {{ ansible_facts.hostname }}\n";
+        }
+
+{% if nginx_status_enabled %}
+        location /nginx_status {
+            stub_status;
+{% for cidr in nginx_status_allow %}
+            allow {{ cidr }};
+{% endfor %}
+            deny all;
+            access_log off;
+        }
+{% endif %}
+    }
+}

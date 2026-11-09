@@ -1,0 +1,42 @@
+---
+- name: NFS 클라이언트 구성
+  hosts: nfs_clients
+  become: yes
+
+  vars:
+    nfs_server_host: 192.168.64.2
+    nfs_export_path: /srv/nfs/shared
+    nfs_mount_point: /mnt/shared
+
+  tasks:
+    - name: nfs-utils 설치
+      ansible.builtin.dnf:
+        name: nfs-utils
+        state: present
+      tags: [install]
+
+    - name: 마운트 지점 생성
+      ansible.builtin.file:
+        path: "{{ nfs_mount_point }}"
+        state: directory
+      tags: [config]
+
+    - name: 마운트 및 fstab 등록
+      ansible.posix.mount:
+        src: "{{ nfs_server_host }}:{{ nfs_export_path }}"
+        path: "{{ nfs_mount_point }}"
+        fstype: nfs
+        opts: defaults,_netdev
+        state: mounted
+      tags: [mount]
+
+    - name: 마운트 확인
+      ansible.builtin.command: findmnt "{{ nfs_mount_point }}"
+      register: mnt
+      changed_when: false
+      tags: [verify]
+
+    - name: 마운트 정보 보고
+      ansible.builtin.debug:
+        msg: "{{ mnt.stdout_lines }}"
+      tags: [verify]

@@ -1,0 +1,77 @@
+---
+- name: 웹 서버 구성
+  hosts: webservers
+  become: yes
+
+  tasks:
+    - name: nginx 설치
+      ansible.builtin.dnf:
+        name: nginx
+        state: present
+      tags: [install]
+
+    - name: nginx 설정 배포
+      ansible.builtin.template:
+        src: ../templates/nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+        validate: 'nginx -t -c %s'
+      notify: reload nginx
+      tags: [config]
+
+    - name: 기본 페이지 배치
+      ansible.builtin.copy:
+        dest: /usr/share/nginx/html/index.html
+        content: |
+          <!doctype html>
+          <html lang="ko"><head><meta charset="utf-8">
+          <title>{{ ansible_facts.hostname }}</title></head>
+          <body><h1>{{ ansible_facts.hostname }}</h1>
+          <p>웹 계층 · Ansible 배포</p></body></html>
+        owner: root
+        group: root
+        mode: '0644'
+      tags: [content]
+
+    - name: nginx 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: yes
+      tags: [service]
+
+    - name: 방화벽에 http 허용
+      ansible.posix.firewalld:
+        service: http
+        permanent: yes
+        immediate: yes
+        state: enabled
+      tags: [firewall]
+
+    - name: 배포 후 헬스체크
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}/health"
+        return_content: yes
+        status_code: 200
+      register: health
+      retries: 5
+      delay: 2
+      until: health.status == 200
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      tags: [verify]
+
+    - name: 헬스체크 결과
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} → {{ health.content | trim }}"
+      tags: [verify]
+
+  handlers:
+    - name: reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded

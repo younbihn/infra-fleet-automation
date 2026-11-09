@@ -1,0 +1,71 @@
+---
+- name: NFS 서버 구성
+  hosts: nfs_server
+  become: yes
+
+  vars:
+    nfs_export_path: /srv/nfs/shared
+    nfs_allowed_network: 192.168.64.0/24
+    nfs_export_options: rw,sync,no_subtree_check
+
+  tasks:
+    - name: nfs-utils 설치
+      ansible.builtin.dnf:
+        name: nfs-utils
+        state: present
+      tags: [install]
+
+    - name: 공유 디렉토리 생성
+      ansible.builtin.file:
+        path: "{{ nfs_export_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '1777'
+      tags: [config]
+
+    - name: exports 설정 배포
+      ansible.builtin.copy:
+        dest: /etc/exports
+        content: |
+          # Managed by Ansible
+          {{ nfs_export_path }} {{ nfs_allowed_network }}({{ nfs_export_options }})
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload exports
+      tags: [config]
+
+    - name: nfs-server 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: nfs-server
+        state: started
+        enabled: yes
+      tags: [service]
+
+    - name: 방화벽 허용
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: yes
+        immediate: yes
+        state: enabled
+      loop:
+        - nfs
+        - mountd
+        - rpc-bind
+      tags: [firewall]
+
+    - name: 공개 목록 확인
+      ansible.builtin.command: exportfs -s
+      register: exports_list
+      changed_when: false
+      tags: [verify]
+
+    - name: 공개 목록 보고
+      ansible.builtin.debug:
+        msg: "{{ exports_list.stdout_lines }}"
+      tags: [verify]
+
+  handlers:
+    - name: reload exports
+      ansible.builtin.command: exportfs -rav

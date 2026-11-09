@@ -1,0 +1,11 @@
+---
+nginx_port: 80
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+nginx_keepalive_timeout: 65
+nginx_error_log_level: warn
+
+# 상태 페이지 — 모니터링에서 쓸 예정이므로 켜둔다
+nginx_status_enabled: true
+nginx_status_allow:
+  - 192.168.64.0/24
