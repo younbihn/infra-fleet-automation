@@ -1,0 +1,92 @@
+---
+- name: 서버 패치 (롤링)
+  hosts: webservers
+  become: yes
+  serial: 1
+  max_fail_percentage: 0
+
+  vars:
+    health_path: /health
+
+  tasks:
+    - name: needs-restarting 을 제공하는 dnf-utils 설치
+      ansible.builtin.dnf:
+        name: dnf-utils
+        state: present
+      tags: [prep]
+
+    - name: 패치 전 커널 버전
+      ansible.builtin.command: uname -r
+      register: kernel_before
+      changed_when: false
+      tags: [patch]
+
+    - name: 업데이트 대상 확인
+      ansible.builtin.command: dnf -q check-update
+      register: updates
+      failed_when: updates.rc not in [0, 100]
+      changed_when: false
+      tags: [patch]
+
+    - name: 전체 패키지 업데이트 (있을 때만)
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_only: yes
+        update_cache: yes
+      when: updates.rc == 100
+      tags: [patch]
+
+    - name: 재부팅이 필요한지 확인
+      ansible.builtin.command: needs-restarting -r
+      register: reboot_check
+      failed_when: reboot_check.rc not in [0, 1]
+      changed_when: false
+      tags: [patch]
+
+    - name: 재부팅하고 돌아올 때까지 대기
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        connect_timeout: 10
+        post_reboot_delay: 15
+        test_command: whoami
+      when: reboot_check.rc == 1
+      tags: [patch, reboot]
+
+    - name: 패치 후 커널 버전
+      ansible.builtin.command: uname -r
+      register: kernel_after
+      changed_when: false
+      tags: [verify]
+
+    - name: 결과 보고 (패치 단계가 함께 실행됐을 때만)
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          업데이트 {{ '있음' if updates.rc == 100 else '없음' }},
+          재부팅 필요 {{ '예' if reboot_check.rc == 1 else '아니오' }},
+          커널 {{ kernel_before.stdout }} → {{ kernel_after.stdout }}
+      when:
+        - updates is defined
+        - reboot_check is defined
+        - kernel_before is defined
+      tags: [verify]
+
+    - name: nginx 가 떠 있는지
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+      tags: [verify]
+
+    - name: 맥에서 /health 확인
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}{{ health_path }}"
+        status_code: 200
+      register: health
+      retries: 10
+      delay: 6
+      until: health.status == 200
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      tags: [verify]
