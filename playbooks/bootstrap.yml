@@ -1,6 +1,6 @@
 ---
 - name: 서버 초기 구성
-  hosts: webservers
+  hosts: threetier
   become: yes
 
   vars:
@@ -55,13 +55,15 @@
 
     - name: 시각 즉시 보정 (오차 임계치 초과 시에만)
       ansible.builtin.command: chronyc makestep
-      when: time_offset_exceeded | default(false)   # 기존 조건 유지
-      changed_when: true    # when을 통과해 실행됐다면 실제로 보정한 것
+      changed_when: true
+      when: clock_drift_sec | int > clock_drift_threshold
+      tags: [time]
 
     - name: 시스템 시각을 하드웨어 시계에 반영 (보정했을 때만)
       ansible.builtin.command: hwclock --systohc
-      when: <기존 조건>
       changed_when: true
+      when: clock_drift_sec | int > clock_drift_threshold
+      tags: [time]
 
     - name: 방화벽에 ssh 허용
       ansible.posix.firewalld:

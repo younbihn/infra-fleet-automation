@@ -1,0 +1,48 @@
+---
+- name: 계층 간 접근 제어
+  hosts: threetier
+  become: yes
+
+  vars:
+    web_ips: "{{ groups['webservers'] | map('extract', hostvars, 'ansible_host') | list }}"
+    app_ips: "{{ groups['appservers'] | map('extract', hostvars, 'ansible_host') | list }}"
+
+  tasks:
+    - name: 앱 계층 — app_port 를 웹 서버에서만 허용
+      ansible.posix.firewalld:
+        rich_rule: >-
+          rule family="ipv4"
+          source address="{{ item }}/32"
+          port port="{{ app_port }}" protocol="tcp"
+          accept
+        permanent: yes
+        immediate: yes
+        state: enabled
+      loop: "{{ web_ips }}"
+      when: inventory_hostname in groups['appservers']
+      tags: [app]
+
+    - name: DB 계층 — db_port 를 앱 서버에서만 허용
+      ansible.posix.firewalld:
+        rich_rule: >-
+          rule family="ipv4"
+          source address="{{ item }}/32"
+          port port="{{ db_port }}" protocol="tcp"
+          accept
+        permanent: yes
+        immediate: yes
+        state: enabled
+      loop: "{{ app_ips }}"
+      when: inventory_hostname in groups['dbservers']
+      tags: [db]
+
+    - name: 적용된 규칙 조회
+      ansible.builtin.command: firewall-cmd --list-all
+      register: fw
+      changed_when: false
+      tags: [verify]
+
+    - name: 규칙 보고
+      ansible.builtin.debug:
+        msg: "{{ fw.stdout_lines }}"
+      tags: [verify]
