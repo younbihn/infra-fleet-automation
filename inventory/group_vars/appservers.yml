@@ -1,0 +1,7 @@
+---
+app_user: deploy
+app_dir: /opt/firstcome-api
+app_repo: https://github.com/younbihn/first-come-api.git
+app_version: main
+app_python: /usr/bin/python3.12
+app_workers: 2

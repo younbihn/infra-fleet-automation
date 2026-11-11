@@ -1,0 +1,89 @@
+---
+- name: DB 계층 구성
+  hosts: dbservers
+  become: yes
+
+  vars:
+    db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
+    app_ips: "{{ groups['appservers'] | map('extract', hostvars, 'ansible_host') | list }}"
+    mysql_socket: /var/lib/mysql/mysql.sock
+
+  tasks:
+    - name: 비밀번호를 받았는지 확인
+      ansible.builtin.assert:
+        that: db_password | length >= 12
+        fail_msg: "맥에서 source ~/.config/infra-fleet/secrets.env 를 먼저 실행하라"
+      tags: [always]
+
+    - name: MySQL 서버와 Ansible용 커넥터 설치
+      ansible.builtin.dnf:
+        name: [mysql-server, python3-PyMySQL]
+        state: present
+      tags: [install]
+
+    - name: 모든 인터페이스에서 접속을 받도록 명시
+      ansible.builtin.lineinfile:
+        path: /etc/my.cnf.d/mysql-server.cnf
+        regexp: '^#?\s*bind-address'
+        line: "bind-address = 0.0.0.0"
+        insertafter: '^\[mysqld\]'
+      notify: restart mysqld
+      tags: [config]
+
+    - name: mysqld 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: mysqld
+        state: started
+        enabled: yes
+      tags: [service]
+
+    - name: 데이터베이스 생성
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        encoding: utf8mb4
+        state: present
+        login_unix_socket: "{{ mysql_socket }}"
+      tags: [schema]
+
+    - name: users 테이블이 있는지 조회
+      community.mysql.mysql_query:
+        login_db: "{{ db_name }}"
+        login_unix_socket: "{{ mysql_socket }}"
+        query: >-
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = %s AND table_name = 'users'
+        positional_args: ["{{ db_name }}"]
+      register: users_table
+      changed_when: false
+      tags: [schema]
+
+    - name: users 테이블 생성 (없을 때만)
+      community.mysql.mysql_query:
+        login_db: "{{ db_name }}"
+        login_unix_socket: "{{ mysql_socket }}"
+        query: |
+          CREATE TABLE users (
+            email           VARCHAR(255) NOT NULL PRIMARY KEY,
+            hashed_password VARCHAR(100) NOT NULL,
+            created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )
+      when: users_table.query_result[0] | length == 0
+      tags: [schema]
+
+    - name: 앱 계정 (앱 서버 주소에서만, 필요한 권한만)
+      community.mysql.mysql_user:
+        name: "{{ db_user }}"
+        host: "{{ item }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.users:SELECT,INSERT"
+        state: present
+        login_unix_socket: "{{ mysql_socket }}"
+      loop: "{{ app_ips }}"
+      no_log: true
+      tags: [schema]
+
+  handlers:
+    - name: restart mysqld
+      ansible.builtin.systemd:
+        name: mysqld
+        state: restarted
