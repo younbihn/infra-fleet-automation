@@ -9,3 +9,4 @@ skip_list:
 
 warn_list:
   - no-relative-paths # templates/ 를 저장소 루트에 둔 구조를 유지. 롤 구조로 옮길 때 해소
+  - fqcn[canonical]   # community.mysql 모듈이 폐기 예정(ansible.mysql 로 이관). 동작 검증을 마친 모듈을 제출 전에는 유지하고, 이관은 후속 작업으로 둔다

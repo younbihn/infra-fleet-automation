@@ -37,6 +37,7 @@
         repo: "{{ app_repo }}"
         dest: "{{ app_dir }}"
         version: "{{ app_version }}"
+      become: true
       become_user: "{{ app_user }}"
       notify: restart app
       tags: [deploy]
@@ -52,6 +53,7 @@
         requirements: "{{ app_dir }}/requirements.txt"
         virtualenv: "{{ app_dir }}/.venv"
         virtualenv_command: "{{ app_python }} -m venv"
+      become: true
       become_user: "{{ app_user }}"
       notify: restart app
       tags: [deploy]
