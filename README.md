@@ -1,4 +1,5 @@
 ![CI](https://github.com/younbihn/infra-fleet-automation/actions/workflows/ci.yml/badge.svg)
+
 #infra-fleet-automation
 
 소규모 서버 팜(Rocky Linux 9)의 초기 구성과 운영 작업을 자동화하는 프로젝트.
