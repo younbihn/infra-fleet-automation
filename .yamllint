@@ -1,0 +1,23 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 160
+  truthy:
+    allowed-values: ["true", "false", "yes", "no"]
+    check-keys: false
+  braces:
+    max-spaces-inside: 1
+  commas:
+    max-spaces-after: -1
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+
+ignore: |
+  .checkup/
+  collections/

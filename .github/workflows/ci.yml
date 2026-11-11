@@ -1,0 +1,50 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: 플레이북 검증
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 받아오기
+        uses: actions/checkout@v4
+
+      - name: Python 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 검사 도구 설치 (버전 고정)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ansible-lint==26.11.0" "yamllint==1.38.0"
+
+      - name: 컬렉션 설치
+        run: ansible-galaxy collection install -r collections/requirements.yml
+
+      - name: 도구 버전 기록
+        run: |
+          ansible --version
+          ansible-lint --version
+          yamllint --version
+
+      - name: YAML 서식 검사
+        run: yamllint .
+
+      - name: Ansible 작성 관례 검사
+        run: ansible-lint
+
+      - name: 플레이북 문법 검사
+        run: |
+          for pb in playbooks/*.yml; do
+            echo "::group::$pb"
+            ansible-playbook -i inventory/hosts.yml "$pb" --syntax-check
+            echo "::endgroup::"
+          done

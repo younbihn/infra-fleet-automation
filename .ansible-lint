@@ -1,0 +1,11 @@
+---
+exclude_paths:
+  - .checkup/
+  - .github/
+  - collections/
+
+skip_list:
+  - name[casing]      # nginx, nfs-utils, deploy 처럼 소문자가 원래 이름인 단어로 시작하는 한글 태스크명
+
+warn_list:
+  - no-relative-paths # templates/ 를 저장소 루트에 둔 구조를 유지. 롤 구조로 옮길 때 해소

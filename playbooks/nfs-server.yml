@@ -68,4 +68,5 @@
 
   handlers:
     - name: reload exports
-      ansible.builtin.command: exportfs -rav
+      ansible.builtin.command: exportfs -ra
+      changed_when: true

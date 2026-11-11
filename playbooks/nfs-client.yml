@@ -19,7 +19,7 @@
       ansible.builtin.file:
         path: "{{ nfs_mount_point }}"
         state: directory
-      tags: [config]
+        mode: "0755"
 
     - name: 마운트 및 fstab 등록
       ansible.posix.mount:
