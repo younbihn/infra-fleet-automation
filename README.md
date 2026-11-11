@@ -1,4 +1,9 @@
-# infra-fleet-automation
+![CI](https://github.com/younbihn/infra-fleet-automation/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/계정/저장소/actions/workflows/파일명/badge.svg)
+ │ │
+ │ └ 대체 텍스트. 이미지가 안 뜰 때 보인다
+ └ 느낌표가 있으면 이미지, 없으면 링크
+#infra-fleet-automation
 
 소규모 서버 팜(Rocky Linux 9)의 초기 구성과 운영 작업을 자동화하는 프로젝트.
 
