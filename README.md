@@ -82,7 +82,7 @@ filter_IN_public_REJECT: IN=enp0s1 SRC=192.168.64.2 DST=192.168.64.5 PROTO=TCP S
 
 두 오류가 다른 이유가 핵심이다. `No route to host` 는 방화벽이 거부한 것이고,
 `Connection refused` 는 서버에 도달했지만 듣는 프로세스가 없다는 뜻이다.
-MySQL 설치 후 검증 결과는 아래에 추가한다.
+MySQL 설치 후의 같은 검증은 아래 「앱 계층 연결 결과」 표에 있다. 3306 에서 mysqld 가 수신 중인데도 lab01 에서는 여전히 `No route to host` 였다.
 
 ### DB 계층 구성 결과 (MySQL)
 
@@ -138,12 +138,12 @@ lab01 의 nginx 접근 로그에는 같은 요청이 수정 전후로 남았다.
 | 확인 | 상태 |
 |---|---|
 | 가입 요청 201 (웹 → 앱 → DB 쓰기) | 확인 (위) |
-| db01 에 행이 저장됨 (`SELECT email, LEFT(hashed_password, 7) ...`) | 미확인 |
-| 같은 이메일 재가입 409 (PRIMARY KEY 충돌 처리) | 미확인 |
-| 다른 웹 서버(lab02) 경유 로그인 성공 (DB 읽기, 같은 데이터) | 미확인 |
-| 앱 서비스 재시작 후 로그인 성공 (상태가 프로세스 밖에 있음) | 미확인 |
-| lab01 → db01:3306 이 방화벽에서 거부됨 (MySQL 설치 후 재확인) | 미확인 |
-| `deploy-db.yml`, `deploy-app.yml` 2회차 changed=0 | 미확인 |
+| db01 에 행이 저장됨 (`SELECT email, LEFT(hashed_password, 7) ...`) | 확인. 2026-11-12 00:14, `test@example.com`, 해시 머리말 `$2b$12$`(bcrypt 비용 12), created_at 2026-11-11 23:52:00 이 가입 요청 201 시각과 일치 |
+| 같은 이메일 재가입 409 (PRIMARY KEY 충돌 처리) | 확인. 2026-11-12 00:16, 맥에서 lab01 로 요청, `HTTP/1.1 409 Conflict`, `{"detail":"이미 가입된 이메일입니다"}` |
+| 다른 웹 서버(lab02) 경유 로그인 성공 (DB 읽기, 같은 데이터) | 확인. 2026-11-12, lab02 에서 lab02 의 nginx(192.168.64.3)로 로그인, 접근 토큰 발급(길이 161, 값은 기록하지 않음). 같은 토큰으로 lab01(192.168.64.2)의 `/api/me` 를 조회해 `HTTP/1.1 200 OK`, `{"email":"test@example.com"}` (2026-11-12 00:18, lab02 셸에서 실행). 두 웹 서버가 같은 앱과 같은 DB 를 본다 |
+| 앱 서비스 재시작 후 로그인 성공 (상태가 프로세스 밖에 있음) | 확인. 2026-11-12 00:20 무렵, app01 에서 `systemctl restart firstcome-api` 후 5초 뒤 맥에서 lab02 로 로그인 요청, `200`. 앱 프로세스만 재시작한 경우이며 DB 재시작과 전체 재부팅은 확인하지 않음 |
+| lab01 → db01:3306 이 방화벽에서 거부됨 (MySQL 설치 후 재확인) | 확인. 2026-11-12 00:14, mysqld 가 `0.0.0.0:3306` 에서 수신 중인 상태에서 `No route to host`, exit 1 |
+| `deploy-db.yml`, `deploy-app.yml` 2회차 changed=0 | 확인. 2026-11-12 00:22 무렵, `deploy-db.yml` db01 ok=8 changed=0 skipped=1(users 테이블이 이미 있어 생성 건너뜀), `deploy-app.yml` app01 ok=11 changed=0. 앱 계정 태스크도 매번 changed 로 나오지 않음 |
 
 배포 후 검증에서 얻은 교훈 하나: 서비스가 `active` 이고 `/` 가 200 이어도 라우트 하나가 빠질 수 있다. 데코레이터의 `@` 누락으로 `/signup` 만 등록되지 않은 사례가 있었고, 앱의 `/openapi.json` 경로 목록으로 찾았다 (TIL `troubleshooting/2026-11-11-route-decorator-missing-at.md`).
 
