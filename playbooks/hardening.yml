@@ -1,6 +1,6 @@
 ---
 - name: 서버 보안 하드닝
-  hosts: webservers
+  hosts: threetier
   become: yes
 
   vars:

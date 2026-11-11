@@ -10,6 +10,21 @@
         state: present
       tags: [install]
 
+    - name: SELinux 정책 도구
+      ansible.builtin.dnf:
+        name:
+          - python3-libsemanage
+          - python3-libselinux
+        state: present
+      tags: [selinux]
+
+    - name: SELinux — nginx 가 다른 서버로 연결하도록 허용
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: yes
+        persistent: yes
+      tags: [selinux]
+
     - name: nginx 설정 배포
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../templates/nginx.conf.j2"

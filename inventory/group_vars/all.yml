@@ -1,0 +1,8 @@
+---
+# 앱 계층이 듣는 포트. 웹 계층(nginx 프록시)과 방화벽이 참조한다
+app_port: 8000
+
+# DB 접속 정보. 앱 계층과 DB 계층과 방화벽이 참조한다
+db_port: 3306
+db_name: firstcome
+db_user: fcapp

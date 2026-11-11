@@ -1,0 +1,111 @@
+---
+- name: 앱 계층 구성
+  hosts: appservers
+  become: yes
+
+  vars:
+    db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
+    jwt_secret: "{{ lookup('env', 'JWT_SECRET') }}"
+    web_ips: "{{ groups['webservers'] | map('extract', hostvars, 'ansible_host') | list }}"
+
+  tasks:
+    - name: 비밀값을 받았는지 확인
+      ansible.builtin.assert:
+        that:
+          - db_password | length >= 12
+          - jwt_secret | length >= 32
+        fail_msg: "맥에서 source ~/.config/infra-fleet/secrets.env 를 먼저 실행하라"
+      tags: [always]
+
+    - name: 앱용 Python 3.12 와 git 설치
+      ansible.builtin.dnf:
+        name: [python3.12, python3.12-pip, git]
+        state: present
+      tags: [install]
+
+    - name: 앱 디렉토리
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0755'
+      tags: [install]
+
+    - name: 소스 받아오기
+      ansible.builtin.git:
+        repo: "{{ app_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ app_version }}"
+      become: true
+      become_user: "{{ app_user }}"
+      notify: restart app
+      tags: [deploy]
+
+    - name: 앱용 Python 3.12, git, Ansible 모듈용 패키지 설치
+      ansible.builtin.dnf:
+        name: [python3.12, python3.12-pip, git, python3-packaging]
+        state: present
+      tags: [install]
+
+    - name: 가상환경에 의존성 설치
+      ansible.builtin.pip:
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ app_dir }}/.venv"
+        virtualenv_command: "{{ app_python }} -m venv"
+      become: true
+      become_user: "{{ app_user }}"
+      notify: restart app
+      tags: [deploy]
+
+    - name: 환경변수 파일
+      ansible.builtin.template:
+        src: ../templates/app.env.j2
+        dest: /etc/firstcome-api.env
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      notify: restart app
+      tags: [config]
+
+    - name: systemd 유닛
+      ansible.builtin.template:
+        src: ../templates/firstcome-api.service.j2
+        dest: /etc/systemd/system/firstcome-api.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart app
+      tags: [config]
+
+    - name: 서비스 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: firstcome-api
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      tags: [service]
+
+    - name: 바뀐 것이 있으면 지금 재시작
+      ansible.builtin.meta: flush_handlers
+
+    - name: 웹 서버 자리에서 앱 응답 확인
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ app_port }}/"
+        return_content: yes
+      register: app_check
+      retries: 10
+      delay: 3
+      until: app_check.status == 200
+      delegate_to: "{{ groups['webservers'][0] }}"
+      become: no
+      changed_when: false
+      tags: [verify]
+
+  handlers:
+    - name: restart app
+      ansible.builtin.systemd:
+        name: firstcome-api
+        state: restarted
+        daemon_reload: yes
