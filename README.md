@@ -143,7 +143,7 @@ lab01 의 nginx 접근 로그에는 같은 요청이 수정 전후로 남았다.
 | 다른 웹 서버(lab02) 경유 로그인 성공 (DB 읽기, 같은 데이터) | 확인. 2026-11-12, lab02 에서 lab02 의 nginx(192.168.64.3)로 로그인, 접근 토큰 발급(길이 161, 값은 기록하지 않음). 같은 토큰으로 lab01(192.168.64.2)의 `/api/me` 를 조회해 `HTTP/1.1 200 OK`, `{"email":"test@example.com"}` (2026-11-12 00:18, lab02 셸에서 실행). 두 웹 서버가 같은 앱과 같은 DB 를 본다 |
 | 앱 서비스 재시작 후 로그인 성공 (상태가 프로세스 밖에 있음) | 확인. 2026-11-12 00:20 무렵, app01 에서 `systemctl restart firstcome-api` 후 5초 뒤 맥에서 lab02 로 로그인 요청, `200`. 앱 프로세스만 재시작한 경우이며 DB 재시작과 전체 재부팅은 확인하지 않음 |
 | lab01 → db01:3306 이 방화벽에서 거부됨 (MySQL 설치 후 재확인) | 확인. 2026-11-12 00:14, mysqld 가 `0.0.0.0:3306` 에서 수신 중인 상태에서 `No route to host`, exit 1 |
-| `deploy-db.yml`, `deploy-app.yml` 2회차 changed=0 | 미확인 |
+| `deploy-db.yml`, `deploy-app.yml` 2회차 changed=0 | 확인. 2026-11-12 00:22 무렵, `deploy-db.yml` db01 ok=8 changed=0 skipped=1(users 테이블이 이미 있어 생성 건너뜀), `deploy-app.yml` app01 ok=11 changed=0. 앱 계정 태스크도 매번 changed 로 나오지 않음 |
 
 배포 후 검증에서 얻은 교훈 하나: 서비스가 `active` 이고 `/` 가 200 이어도 라우트 하나가 빠질 수 있다. 데코레이터의 `@` 누락으로 `/signup` 만 등록되지 않은 사례가 있었고, 앱의 `/openapi.json` 경로 목록으로 찾았다 (TIL `troubleshooting/2026-11-11-route-decorator-missing-at.md`).
 
