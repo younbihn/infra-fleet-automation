@@ -1,0 +1,10 @@
+---
+lb_port: 80
+lb_balance: roundrobin
+lb_health_path: /health
+lb_check_inter: 2s
+lb_fall: 3
+lb_rise: 2
+lb_maxconn: 4000
+lb_stats_port: 8008
+lb_admin_cidr: 192.168.64.1/32

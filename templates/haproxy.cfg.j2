@@ -1,0 +1,46 @@
+# {{ ansible_managed }}
+# 이 파일은 Ansible이 관리합니다. 직접 수정하면 다음 배포 때 덮어써집니다.
+
+global
+    log stdout format raw local0
+    chroot /var/lib/haproxy
+    pidfile /var/run/haproxy.pid
+    maxconn {{ lb_maxconn }}
+    user haproxy
+    group haproxy
+    daemon
+    stats socket /var/lib/haproxy/stats
+
+defaults
+    mode http
+    log global
+    option httplog
+    option dontlognull
+    option forwardfor
+    option redispatch
+    retries 3
+    timeout connect 3s
+    timeout client 30s
+    timeout server 30s
+    timeout http-request 10s
+    timeout http-keep-alive 10s
+    timeout check 3s
+
+frontend web_in
+    bind *:{{ lb_port }}
+    default_backend web_pool
+
+backend web_pool
+    balance {{ lb_balance }}
+    option httpchk GET {{ lb_health_path }}
+    http-check expect status 200
+    default-server inter {{ lb_check_inter }} fall {{ lb_fall }} rise {{ lb_rise }}
+{% for host in groups['webservers'] %}
+    server {{ host }} {{ hostvars[host].ansible_host }}:{{ hostvars[host].nginx_port | default(80) }} check
+{% endfor %}
+
+listen stats
+    bind *:{{ lb_stats_port }}
+    stats enable
+    stats uri /stats
+    stats refresh 5s

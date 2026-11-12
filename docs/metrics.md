@@ -112,6 +112,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/bootstrap.yml --check -K
 - [ ] 하드닝 플레이북 적용 전후 보안 점검 항목 통과율
 - [ ] 패치 작업 소요 시간 (수동 vs `serial` 롤링 적용)
 - [ ] 신규 서버 투입부터 서비스 가능 상태까지의 총 리드타임
+- [ ] 웹 계층 이중화 무중단 측정 (시나리오 1, 2 완료, 9번 절 참고)
 
 ---
 
@@ -172,3 +173,34 @@ env ANSIBLE_CALLBACKS_ENABLED=ansible.posix.profile_tasks ansible-playbook -i  5
 | 재부팅 대기 (reboot 태스크) | (측정값) |
 | 실패 격리 | max_fail_percentage: 0 → 첫 배치 실패 시 나머지 미처리 |
 | 2회차 | changed=0 (check-update 0 → 업데이트·재부팅 skipping) |
+
+---
+
+## 9. 웹 계층 이중화 무중단 측정 (2026-11-12)
+
+**환경**: HAProxy (lb01, 버전 미확인) → nginx 2대(lab01, lab02), balance roundrobin,
+헬스체크 inter 2s / fall 3 / rise 2 (설계값, 적용값은 templates/haproxy.cfg.j2 로 확인),
+맥에서 `http://192.168.64.7/health` 로 0.2초 간격 요청 60초, `scripts/failover_probe.py`
+
+| 시나리오 | 요청 수 | 실패 | 성공률 | p95 응답 | 최대 응답 | DOWN 판정까지 |
+|---|---|---|---|---|---|---|
+| nginx 중지 (연결 거부) | 296 | 0 | 100.00% | 11 ms | 39 ms | 약 3~4초 (추정, 중지 시각 미기록) |
+| VM 일시정지 (무응답) | 240 | 0 | 100.00% | 9 ms | 3012 ms | 약 9~12초 (추정, 일시정지 시각 미기록) |
+
+원본 출력: `docs/measurements/failover-nginx-stop-152203.txt`
+
+**관찰**: 25~30초 구간부터 lab01 응답이 0으로 줄고(25~30초 구간 2건, 30~40초 구간 0건) lab02가 전부 받았다.
+그 구간에도 실패는 0건이었다. 40~45초 구간에 lab01 응답 3건이 돌아왔고, 45~50초 구간에 12건으로 원래 비율이 됐다.
+연결 거부는 즉시 돌아오므로 HAProxy가 같은 요청을 lab02 로 다시 보낸 것으로 해석한다(retries, redispatch 영향은 확인하지 않음).
+HAProxy 로그(lb01, journalctl -u haproxy): 15:22:33 `lab01 is DOWN` (Layer4, Connection refused), 15:22:47 `lab01 is UP` (Layer7 check passed, code 200).
+측정 시작(15:22:03) 기준 각각 약 +30초, 약 +44초. 감지 지연은 중지 시각을 기록하지 못해 표 기준 추정이다.
+**한계**: 프로브는 /health만 호출. 앱·DB 경로(/api/)의 장애는 이 이중화로 못 막음. LB 자신(lb01)은 단일 장애점.
+
+HAProxy 로그(lb01, journalctl -u haproxy): 15:22:33 `lab01 is DOWN` (Layer4, Connection refused), 15:22:47 `lab01 is UP` (Layer7 check passed, code 200).
+측정 시작(15:22:03) 기준 각각 약 +30초, 약 +44초. 감지 지연은 중지 시각을 기록하지 못해 표 기준 추정이다.
+
+시나리오 2 관찰: lab01 VM 일시정지 후 3초대 지연 요청 4건(측정 시작 +26.2, +29.2, +32.2, +35.2초, 각 3.01초, 모두 lab02 응답).
+실패는 0건이나 응답 없는 서버로 배정된 요청이 약 3초 대기 후 lab02 로 재시도됐다. 시나리오 1(최대 39 ms)과 달리 최대 3012 ms.
+p95 는 지연 요청이 1.7%뿐이라 9 ms 로 보인다. 프로브가 순차 요청이라 동시 접속자가 있을 때의 영향은 알 수 없다.
+HAProxy 로그: 15:48:24 `lab01 is DOWN` (Layer4 timeout), 15:48:52 `lab01 is UP` (Layer7 check passed). 복구는 프로브 종료 뒤라 관측하지 못했다.
+원본 출력: docs/measurements/failover-vm-pause-*.txt
