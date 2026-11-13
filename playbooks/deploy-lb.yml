@@ -1,0 +1,81 @@
+---
+- name: 로드밸런서 구성
+  hosts: loadbalancers
+  become: yes
+
+  tasks:
+    - name: haproxy 설치
+      ansible.builtin.dnf:
+        name: haproxy
+        state: present
+      tags: [install]
+
+    - name: haproxy 설정 배포
+      ansible.builtin.template:
+        src: ../templates/haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+        validate: 'haproxy -c -f %s'
+      notify: reload haproxy
+      tags: [config]
+
+    - name: haproxy 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: haproxy
+        state: started
+        enabled: yes
+      tags: [service]
+
+    - name: 방화벽 — 서비스 포트 허용
+      ansible.posix.firewalld:
+        port: "{{ lb_port }}/tcp"
+        permanent: yes
+        immediate: yes
+        state: enabled
+      tags: [firewall]
+
+    - name: 방화벽 — 상태 페이지는 관리 PC 에서만
+      ansible.posix.firewalld:
+        rich_rule: >-
+          rule family="ipv4"
+          source address="{{ lb_admin_cidr }}"
+          port port="{{ lb_stats_port }}" protocol="tcp"
+          accept
+        permanent: yes
+        immediate: yes
+        state: enabled
+      tags: [firewall]
+
+    - name: 설정 변경분을 검증 전에 반영
+      ansible.builtin.meta: flush_handlers
+
+    - name: 배포 후 헬스체크 (로드밸런서 경유 10회)
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ lb_port }}{{ lb_health_path }}"
+        return_content: yes
+        status_code: 200
+      register: lb_probe
+      loop: "{{ range(0, 10) | list }}"
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      tags: [verify]
+
+    - name: 웹 서버가 모두 응답에 참여했는지 확인
+      ansible.builtin.assert:
+        that:
+          - lb_answers | length == groups['webservers'] | length
+        success_msg: "응답한 서버 {{ lb_answers }}"
+        fail_msg: "응답한 서버 {{ lb_answers }} · 기대 {{ groups['webservers'] | length }}대"
+      vars:
+        lb_answers: "{{ lb_probe.results | map(attribute='content') | map('trim') | unique | list }}"
+      tags: [verify]
+
+  handlers:
+    - name: reload haproxy
+      ansible.builtin.systemd:
+        name: haproxy
+        state: reloaded

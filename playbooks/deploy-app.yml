@@ -6,7 +6,7 @@
   vars:
     db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
     jwt_secret: "{{ lookup('env', 'JWT_SECRET') }}"
-    web_ips: "{{ groups['webservers'] | map('extract', hostvars, 'ansible_host') | list }}"
+    proxy_ips: "{{ (groups['webservers'] + groups['loadbalancers']) | map('extract', hostvars, 'ansible_host') | list }}"
 
   tasks:
     - name: 비밀값을 받았는지 확인
