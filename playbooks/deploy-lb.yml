@@ -37,6 +37,15 @@
         state: enabled
       tags: [firewall]
 
+    - name: 방화벽 L4 비교 실험 포트 (실험할 때만)
+      ansible.posix.firewalld:
+        port: "{{ lb_l4_port }}/tcp"
+        permanent: yes
+        immediate: yes
+        state: enabled
+      when: lb_l4_demo | bool
+      tags: [firewall]
+
     - name: 방화벽 — 상태 페이지는 관리 PC 에서만
       ansible.posix.firewalld:
         rich_rule: >-
