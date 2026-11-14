@@ -1,0 +1,94 @@
+---
+- name: 전 서버에 node_exporter 배포
+  hosts: all
+  become: yes
+  vars:
+    ne_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+    ne_base: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}"
+    ne_dir: "node_exporter-{{ node_exporter_version }}.linux-{{ ne_arch }}"
+
+  tasks:
+    - name: 실행 전용 계정 생성
+      ansible.builtin.user:
+        name: node_exporter
+        system: yes
+        shell: /sbin/nologin
+        create_home: no
+      tags: [user]
+
+    - name: 압축 해제 도구 설치 (최소 설치에는 tar 가 없다)
+      ansible.builtin.dnf:
+        name: [tar, gzip]
+        state: present
+      tags: [install]
+
+    - name: 릴리스 압축 파일 내려받기 (체크섬 검증)
+      ansible.builtin.get_url:
+        url: "{{ ne_base }}/{{ ne_dir }}.tar.gz"
+        dest: "/tmp/{{ ne_dir }}.tar.gz"
+        checksum: "sha256:{{ ne_base }}/sha256sums.txt"
+        mode: '0644'
+      tags: [install]
+
+    - name: 압축 풀기
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ ne_dir }}.tar.gz"
+        dest: /opt
+        remote_src: yes
+        creates: "/opt/{{ ne_dir }}/node_exporter"
+      tags: [install]
+
+    - name: 실행 파일을 /usr/local/bin에 배치
+      ansible.builtin.copy:
+        src: "/opt/{{ ne_dir }}/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0755'
+      notify: restart node_exporter
+      tags: [install]
+
+    - name: systemd 유닛 배포
+      ansible.builtin.template:
+        src: ../templates/node_exporter.service.j2
+        dest: /etc/systemd/system/node_exporter.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart node_exporter
+      tags: [config]
+
+    - name: 방화벽, 모니터링 서버에서 오는 수집만 허용
+      ansible.posix.firewalld:
+        rich_rule: >-
+          rule family="ipv4" source address="{{ monitoring_source }}"
+          port port="{{ node_exporter_port }}" protocol="tcp" accept
+        permanent: yes
+        immediate: yes
+        state: enabled
+      tags: [firewall]
+
+    - name: node_exporter 실행 및 부팅 시 자동 시작
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      tags: [service]
+
+    - name: 메트릭이 나오는지 확인
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ node_exporter_port }}/metrics"
+        return_content: yes
+      register: ne_metrics
+      failed_when: "'node_cpu_seconds_total' not in ne_metrics.content"
+      changed_when: false
+      tags: [verify]
+
+  handlers:
+    - name: restart node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: restarted
+        daemon_reload: yes
