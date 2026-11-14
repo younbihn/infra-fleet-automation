@@ -11,3 +11,10 @@ vault-password*
 __pycache__/
 *.pyc
 *.pcap
+
+# monitoring: 비밀값은 올리지 않는다
+monitoring/.env
+monitoring/alertmanager/secrets/*
+!monitoring/alertmanager/secrets/*.example
+monitoring/.env*
+!monitoring/.env.example
