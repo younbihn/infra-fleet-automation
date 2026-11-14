@@ -1,0 +1,41 @@
+---
+- name: 웹 콘텐츠 경로의 SELinux 파일 문맥 등록
+  hosts: webservers
+  become: yes
+  vars:
+    web_content_dir: /srv/web
+
+  tasks:
+    - name: SELinux 관리 도구 설치
+      ansible.builtin.dnf:
+        name: policycoreutils-python-utils
+        state: present
+      tags: [install]
+
+    - name: 콘텐츠 디렉터리 생성
+      ansible.builtin.file:
+        path: "{{ web_content_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags: [content]
+
+    - name: 경로 규칙을 정책에 영구 등록
+      community.general.sefcontext:
+        target: "{{ web_content_dir }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      tags: [selinux]
+
+    - name: 라벨이 규칙과 어긋난 파일이 있는지 조회 (변경 없음)
+      ansible.builtin.command: restorecon -Rnv {{ web_content_dir }}
+      register: relabel_check
+      changed_when: false
+      tags: [selinux]
+
+    - name: 어긋난 라벨을 규칙대로 되돌림
+      ansible.builtin.command: restorecon -Rv {{ web_content_dir }}
+      when: relabel_check.stdout | length > 0
+      changed_when: true
+      tags: [selinux]
