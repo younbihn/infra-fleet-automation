@@ -8,3 +8,6 @@ vault-password*
 
 # 점검 로그
 .checkup/
+__pycache__/
+*.pyc
+*.pcap

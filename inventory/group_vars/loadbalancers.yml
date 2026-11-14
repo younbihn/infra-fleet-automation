@@ -8,3 +8,5 @@ lb_rise: 2
 lb_maxconn: 4000
 lb_stats_port: 8008
 lb_admin_cidr: 192.168.64.1/32
+lb_l4_demo: false
+lb_l4_port: 81

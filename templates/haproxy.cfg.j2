@@ -44,3 +44,15 @@ listen stats
     stats enable
     stats uri /stats
     stats refresh 5s
+{% if lb_l4_demo | bool %}
+
+# L4 비교 실험용: 같은 서버 묶음을 TCP 모드로 나눠 보낸다 (1-8 실험 후 lb_l4_demo: false 로 되돌린다)
+listen web_l4
+    bind *:{{ lb_l4_port }}
+    mode tcp
+    balance {{ lb_balance }}
+    default-server inter {{ lb_check_inter }} fall {{ lb_fall }} rise {{ lb_rise }}
+{% for host in groups['webservers'] %}
+    server {{ host }} {{ hostvars[host].ansible_host }}:{{ hostvars[host].nginx_port | default(80) }} check
+{% endfor %}
+{% endif %}
