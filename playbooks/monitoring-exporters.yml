@@ -16,7 +16,7 @@
         create_home: no
       tags: [user]
 
-    - name: 압축 해제 도구 설치 (최소 설치에는 tar 가 없다)가
+    - name: 압축 해제 도구 설치 (최소 설치에는 tar 가 없다)
       ansible.builtin.dnf:
         name: [tar, gzip]
         state: present
