@@ -203,7 +203,7 @@ HAProxy 로그(lb01, journalctl -u haproxy): 15:22:33 `lab01 is DOWN` (Layer4, C
 실패는 0건이나 응답 없는 서버로 배정된 요청이 약 3초 대기 후 lab02 로 재시도됐다. 시나리오 1(최대 39 ms)과 달리 최대 3012 ms.
 p95 는 지연 요청이 1.7%뿐이라 9 ms 로 보인다. 프로브가 순차 요청이라 동시 접속자가 있을 때의 영향은 알 수 없다.
 HAProxy 로그: 15:48:24 `lab01 is DOWN` (Layer4 timeout), 15:48:52 `lab01 is UP` (Layer7 check passed). 복구는 프로브 종료 뒤라 관측하지 못했다.
-원본 출력: docs/measurements/failover-vm-pause-*.txt
+원본 출력: `docs/measurements/failover-vm-pause-154746.txt`
 
 ## 10. 로드밸런서 경유 지연 (2026-11-14)
 
