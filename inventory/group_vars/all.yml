@@ -6,3 +6,10 @@ app_port: 8000
 db_port: 3306
 db_name: firstcome
 db_user: fcapp
+
+# 모니터링 (1-11)
+monitoring_source: 192.168.64.1    # Prometheus가 도는 곳(맥). 이 주소에서 오는 수집 요청만 허용한다
+node_exporter_version: 1.9.1
+node_exporter_port: 9100
+nginx_exporter_version: 1.5.1
+nginx_exporter_port: 9113
